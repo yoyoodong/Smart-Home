@@ -242,11 +242,15 @@
 
         /* Highlighted Text Style from the Library */
         mark.highlight-wrap {
-            background-color: #fff2a8 !important; /* A more prominent yellow */
-            color: inherit !important; /* Ensure text color doesn't change */
-            padding: 0.1em 0;
-            border-bottom: 1px dotted var(--accent-color);
-            cursor: pointer;
+            background-color: rgba(144, 183, 146, 0.3) !important; /* 低饱和度、高级感的绿色，带透明度 */
+            border-radius: 2px;
+            padding: 0 2px;
+            margin: 0 1px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .highlight-wrap:hover {
+            background-color: rgba(144, 183, 146, 0.5) !important; /* 悬停时稍微加深 */
         }
 
         /* Card Component */
