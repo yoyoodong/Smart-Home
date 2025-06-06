@@ -1301,7 +1301,6 @@
             
             try {
                 // 尝试获取高亮ID
-                // 不同版本的库可能将ID存储在不同的属性中
                 const id = highlightEl.dataset.highlightId || 
                            highlightEl.getAttribute('data-highlight-id') ||
                            Array.from(highlightEl.classList)
@@ -1309,10 +1308,11 @@
                 
                 if (id) {
                     // 如果找到ID，使用库的API移除高亮
-                    highlighter.remove(id.replace('highlight-id-', ''));
+                    const idToRemove = id.replace('highlight-id-', '');
+                    highlighter.remove(idToRemove);
                     
                     // 更新localStorage
-                    removeHighlightFromStorage(id);
+                    removeHighlightFromStorage(idToRemove);
                 } else {
                     // 如果找不到ID，尝试移除整个元素的高亮
                     const range = document.createRange();
@@ -1328,15 +1328,14 @@
         highlighter.on('selection:create', ({sources}) => {
             if (!sources || sources.length === 0) return;
             
-            const serializedSource = sources[0];
-            console.log('Creating highlight:', serializedSource);
-            
             try {
                 // 获取现有高亮
                 const savedHighlights = getSavedHighlights();
                 
                 // 添加新高亮
-                savedHighlights.push(serializedSource);
+                sources.forEach(source => {
+                    savedHighlights.push(source);
+                });
                 
                 // 保存回localStorage
                 saveHighlights(savedHighlights);
@@ -1351,8 +1350,14 @@
         highlighter.on('selection:remove', ({ids}) => {
             if (!ids || ids.length === 0) return;
             
-            console.log('Removing highlight with ID:', ids[0]);
-            removeHighlightFromStorage(ids[0]);
+            try {
+                ids.forEach(id => {
+                    console.log('Removing highlight with ID:', id);
+                    removeHighlightFromStorage(id);
+                });
+            } catch (err) {
+                console.error('Error handling highlight removal:', err);
+            }
         });
 
         // 6. 从localStorage获取保存的高亮
@@ -1370,6 +1375,7 @@
         function saveHighlights(highlights) {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(highlights));
+                console.log(`Saved ${highlights.length} highlights to localStorage`);
             } catch (err) {
                 console.error('Error saving highlights to localStorage:', err);
             }
@@ -1396,6 +1402,7 @@
                 if (savedHighlights.length > 0) {
                     // 使用库的API恢复高亮
                     highlighter.fromStore(savedHighlights);
+                    console.log('Successfully restored highlights from localStorage');
                 }
             } catch (err) {
                 console.error('Error loading highlights:', err);
@@ -1403,11 +1410,23 @@
         }
         
         // 10. 初始化时加载保存的高亮
-        loadHighlights();
+        // 延迟加载以确保DOM完全加载
+        setTimeout(() => {
+            loadHighlights();
+        }, 500);
         
         // 11. 调试信息 - 在控制台显示库版本和状态
-        console.log('Web Highlighter initialized. Version:', highlighter.version || 'unknown');
-        console.log('Saved highlights:', getSavedHighlights().length);
+        console.log('Web Highlighter initialized');
+        console.log('Saved highlights count:', getSavedHighlights().length);
+        
+        // 12. 导出对象到全局，方便调试
+        window.smartHomeHighlighter = {
+            highlighter,
+            getSavedHighlights,
+            saveHighlights,
+            loadHighlights,
+            removeHighlightFromStorage
+        };
     });
     </script>
 </body>
