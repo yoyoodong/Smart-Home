@@ -1258,7 +1258,7 @@
 
         // 1. 初始化高亮器
         const highlighter = new Highlighter({
-            $root: mainContent, // 注意：某些版本的库使用$root而不是root
+            $root: document.body, // 使用整个文档体作为根元素，确保能捕获所有内容
             wrapTag: 'mark',
             className: 'highlight-wrap',
             exceptSelectors: ['pre', 'code'],
@@ -1334,7 +1334,10 @@
                 
                 // 添加新高亮
                 sources.forEach(source => {
-                    savedHighlights.push(source);
+                    // 确保不重复添加
+                    if (!savedHighlights.some(h => h.id === source.id)) {
+                        savedHighlights.push(source);
+                    }
                 });
                 
                 // 保存回localStorage
@@ -1367,6 +1370,8 @@
                 return saved ? JSON.parse(saved) : [];
             } catch (err) {
                 console.error('Error parsing saved highlights:', err);
+                // 如果解析失败，重置存储
+                localStorage.removeItem(STORAGE_KEY);
                 return [];
             }
         }
@@ -1400,20 +1405,48 @@
                 console.log('Loading saved highlights:', savedHighlights.length);
                 
                 if (savedHighlights.length > 0) {
-                    // 使用库的API恢复高亮
-                    highlighter.fromStore(savedHighlights);
-                    console.log('Successfully restored highlights from localStorage');
+                    try {
+                        // 使用库的API恢复高亮
+                        highlighter.fromStore(savedHighlights);
+                        console.log('Successfully restored highlights from localStorage');
+                    } catch (e) {
+                        console.error('Error restoring highlights:', e);
+                        
+                        // 尝试逐个恢复高亮
+                        console.log('Trying to restore highlights one by one...');
+                        let successCount = 0;
+                        savedHighlights.forEach(h => {
+                            try {
+                                highlighter.fromStore([h]);
+                                successCount++;
+                            } catch (err) {
+                                console.error('Failed to restore highlight:', h.id, err);
+                            }
+                        });
+                        console.log(`Restored ${successCount} out of ${savedHighlights.length} highlights`);
+                    }
                 }
             } catch (err) {
-                console.error('Error loading highlights:', err);
+                console.error('Error in loadHighlights function:', err);
             }
         }
         
         // 10. 初始化时加载保存的高亮
-        // 延迟加载以确保DOM完全加载
-        setTimeout(() => {
-            loadHighlights();
-        }, 500);
+        // 使用更长的延迟，确保DOM完全加载和渲染
+        window.addEventListener('load', () => {
+            // 使用更长的延迟，确保DOM完全加载和渲染
+            setTimeout(() => {
+                loadHighlights();
+                // 检查是否已加载高亮，如果没有则重试
+                setTimeout(() => {
+                    const highlights = document.querySelectorAll('.highlight-wrap');
+                    if (highlights.length === 0 && getSavedHighlights().length > 0) {
+                        console.log('No highlights found on page, retrying...');
+                        loadHighlights();
+                    }
+                }, 1000);
+            }, 800);
+        });
         
         // 11. 调试信息 - 在控制台显示库版本和状态
         console.log('Web Highlighter initialized');
@@ -1425,7 +1458,12 @@
             getSavedHighlights,
             saveHighlights,
             loadHighlights,
-            removeHighlightFromStorage
+            removeHighlightFromStorage,
+            // 添加一个手动恢复高亮的函数，方便用户在控制台调用
+            restoreHighlights: function() {
+                loadHighlights();
+                return "尝试恢复高亮，请查看控制台日志";
+            }
         };
     });
     </script>
