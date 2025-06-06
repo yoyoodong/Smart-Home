@@ -1243,74 +1243,164 @@
      * Highlights are persisted in the browser's localStorage.
      */
     document.addEventListener('DOMContentLoaded', () => {
-        const STORAGE_KEY = 'report_highlights';
+        // 确保使用唯一的存储键，避免与其他应用冲突
+        const STORAGE_KEY = 'smart_home_report_highlights';
         const annotationSwitch = document.getElementById('annotation-switch');
         const mainContent = document.querySelector('main.container');
+        let isHighlighterActive = false;
 
-        // 1. Initialize the Highlighter
+        // 1. 初始化高亮器
         const highlighter = new Highlighter({
-            root: mainContent,
+            $root: mainContent, // 注意：某些版本的库使用$root而不是root
             wrapTag: 'mark',
             className: 'highlight-wrap',
-            exceptSelectors: ['pre', 'code']
+            exceptSelectors: ['pre', 'code'],
+            style: {
+                className: 'highlight-wrap'
+            }
         });
 
-        // 2. Event Listener for Annotation Toggle
+        // 2. 标注模式开关事件监听
         annotationSwitch.addEventListener('change', () => {
             if (annotationSwitch.checked) {
                 highlighter.run();
+                isHighlighterActive = true;
                 mainContent.style.cursor = 'text';
+                
+                // 添加点击事件处理，用于取消高亮
+                document.addEventListener('click', handleHighlightClick);
             } else {
                 highlighter.stop();
+                isHighlighterActive = false;
                 mainContent.style.cursor = 'default';
-            }
-        });
-
-        // 3. Save Highlights to localStorage
-        highlighter.on('selection:create', ({sources}) => {
-            const serializedSource = sources[0];
-            const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            savedHighlights.push(serializedSource);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(savedHighlights));
-        });
-
-        // 4. Load Highlights from localStorage
-        const loadHighlights = () => {
-            try {
-                const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-                if (savedHighlights.length > 0) {
-                    highlighter.fromStore(savedHighlights);
-                }
-            } catch (e) {
-                console.error('Error loading highlights from localStorage:', e);
-                localStorage.removeItem(STORAGE_KEY);
-            }
-        };
-
-        // 5. Handle click on highlights to remove them
-        highlighter.on('click', ({id}) => {
-            if (id) {
-                highlighter.remove(id);
                 
-                // Update localStorage
-                const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-                const updatedHighlights = savedHighlights.filter(h => h.id !== id);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHighlights));
+                // 移除点击事件处理
+                document.removeEventListener('click', handleHighlightClick);
             }
         });
 
-        // 6. Handle highlight removal
+        // 3. 处理高亮点击事件（取消高亮）
+        function handleHighlightClick(e) {
+            // 只有在高亮器激活状态下才处理点击
+            if (!isHighlighterActive) return;
+            
+            // 检查点击的是否是高亮元素
+            const highlightEl = e.target.closest('.highlight-wrap');
+            if (!highlightEl) return;
+            
+            // 防止事件冒泡和默认行为
+            e.preventDefault();
+            e.stopPropagation();
+            
+            try {
+                // 尝试获取高亮ID
+                // 不同版本的库可能将ID存储在不同的属性中
+                const id = highlightEl.dataset.highlightId || 
+                           highlightEl.getAttribute('data-highlight-id') ||
+                           Array.from(highlightEl.classList)
+                               .find(cls => cls.startsWith('highlight-id-'));
+                
+                if (id) {
+                    // 如果找到ID，使用库的API移除高亮
+                    highlighter.remove(id.replace('highlight-id-', ''));
+                    
+                    // 更新localStorage
+                    removeHighlightFromStorage(id);
+                } else {
+                    // 如果找不到ID，尝试移除整个元素的高亮
+                    const range = document.createRange();
+                    range.selectNode(highlightEl);
+                    highlighter.removeHighlight(range);
+                }
+            } catch (err) {
+                console.error('Error removing highlight:', err);
+            }
+        }
+
+        // 4. 创建高亮时保存到localStorage
+        highlighter.on('selection:create', ({sources}) => {
+            if (!sources || sources.length === 0) return;
+            
+            const serializedSource = sources[0];
+            console.log('Creating highlight:', serializedSource);
+            
+            try {
+                // 获取现有高亮
+                const savedHighlights = getSavedHighlights();
+                
+                // 添加新高亮
+                savedHighlights.push(serializedSource);
+                
+                // 保存回localStorage
+                saveHighlights(savedHighlights);
+                
+                console.log('Highlight saved. Total highlights:', savedHighlights.length);
+            } catch (err) {
+                console.error('Error saving highlight:', err);
+            }
+        });
+
+        // 5. 移除高亮时更新localStorage
         highlighter.on('selection:remove', ({ids}) => {
             if (!ids || ids.length === 0) return;
             
-            const highlightIdToRemove = ids[0];
-            const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            const updatedHighlights = savedHighlights.filter(h => h.id !== highlightIdToRemove);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHighlights));
+            console.log('Removing highlight with ID:', ids[0]);
+            removeHighlightFromStorage(ids[0]);
         });
+
+        // 6. 从localStorage获取保存的高亮
+        function getSavedHighlights() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                return saved ? JSON.parse(saved) : [];
+            } catch (err) {
+                console.error('Error parsing saved highlights:', err);
+                return [];
+            }
+        }
+
+        // 7. 保存高亮到localStorage
+        function saveHighlights(highlights) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(highlights));
+            } catch (err) {
+                console.error('Error saving highlights to localStorage:', err);
+            }
+        }
+
+        // 8. 从localStorage中移除高亮
+        function removeHighlightFromStorage(id) {
+            try {
+                const savedHighlights = getSavedHighlights();
+                const updatedHighlights = savedHighlights.filter(h => h.id !== id);
+                saveHighlights(updatedHighlights);
+                console.log('Highlight removed. Remaining highlights:', updatedHighlights.length);
+            } catch (err) {
+                console.error('Error removing highlight from storage:', err);
+            }
+        }
+
+        // 9. 页面加载时恢复高亮
+        function loadHighlights() {
+            try {
+                const savedHighlights = getSavedHighlights();
+                console.log('Loading saved highlights:', savedHighlights.length);
+                
+                if (savedHighlights.length > 0) {
+                    // 使用库的API恢复高亮
+                    highlighter.fromStore(savedHighlights);
+                }
+            } catch (err) {
+                console.error('Error loading highlights:', err);
+            }
+        }
         
-        // Initial load of highlights
+        // 10. 初始化时加载保存的高亮
         loadHighlights();
+        
+        // 11. 调试信息 - 在控制台显示库版本和状态
+        console.log('Web Highlighter initialized. Version:', highlighter.version || 'unknown');
+        console.log('Saved highlights:', getSavedHighlights().length);
     });
     </script>
 </body>
