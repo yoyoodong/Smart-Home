@@ -1248,15 +1248,14 @@
         const mainContent = document.querySelector('main.container');
 
         // 1. Initialize the Highlighter
-        // The root element is the area where highlighting is allowed.
         const highlighter = new Highlighter({
             root: mainContent,
-            wrapTag: 'mark', // Use the semantic <mark> tag
-            className: 'highlight-wrap' // Custom class for styling
+            wrapTag: 'mark',
+            className: 'highlight-wrap',
+            exceptSelectors: ['pre', 'code']
         });
 
         // 2. Event Listener for Annotation Toggle
-        // Enables or disables the highlighter based on the switch state.
         annotationSwitch.addEventListener('change', () => {
             if (annotationSwitch.checked) {
                 highlighter.run();
@@ -1268,22 +1267,14 @@
         });
 
         // 3. Save Highlights to localStorage
-        // When a new highlight is created by the user, this event fires.
         highlighter.on('selection:create', ({sources}) => {
-            const serializedSource = sources[0]; // Get the data for the new highlight
-            
-            // Get existing highlights from storage or initialize an empty array
+            const serializedSource = sources[0];
             const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            
-            // Add the new highlight's data
             savedHighlights.push(serializedSource);
-
-            // Save the updated array back to localStorage
             localStorage.setItem(STORAGE_KEY, JSON.stringify(savedHighlights));
         });
 
-        // 4. Load and Draw Highlights from localStorage on Page Load
-        // This function runs every time the page is loaded to restore saved highlights.
+        // 4. Load Highlights from localStorage
         const loadHighlights = () => {
             try {
                 const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -1292,23 +1283,29 @@
                 }
             } catch (e) {
                 console.error('Error loading highlights from localStorage:', e);
-                localStorage.removeItem(STORAGE_KEY); // Clear corrupted data
+                localStorage.removeItem(STORAGE_KEY);
             }
         };
 
-        // 5. Remove Highlight on Click
-        // The library automatically handles clicks on highlighted elements.
-        // When a highlight is removed, we update localStorage.
-        highlighter.on('selection:remove', ({ids}) => {
-            const highlightIdToRemove = ids[0];
-            
-            // Get existing highlights
-            const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        // 5. Handle click on highlights to remove them
+        highlighter.on('click', ({id}) => {
+            if (id) {
+                highlighter.remove(id);
+                
+                // Update localStorage
+                const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+                const updatedHighlights = savedHighlights.filter(h => h.id !== id);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHighlights));
+            }
+        });
 
-            // Filter out the removed highlight
-            const updatedHighlights = savedHighlights.filter(h => h.id !== highlightIdToRemove);
+        // 6. Handle highlight removal
+        highlighter.on('selection:remove', ({ids}) => {
+            if (!ids || ids.length === 0) return;
             
-            // Save the updated array back to storage
+            const highlightIdToRemove = ids[0];
+            const savedHighlights = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const updatedHighlights = savedHighlights.filter(h => h.id !== highlightIdToRemove);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHighlights));
         });
         
